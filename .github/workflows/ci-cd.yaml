@@ -36,7 +36,7 @@ jobs:
     - name: Update Helm values in GitOps repo
       run: |
         git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/leopincle/gitops-helm-argocd.git
-        cd gitops-helm-argocd
+        cd gitops-helm-argocd/helm/ci-cd-app/
 
         sed -i "s/tag:.*/tag: ${GITHUB_SHA}/" values.yaml
 
