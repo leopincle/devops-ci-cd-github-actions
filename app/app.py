@@ -1,11 +1,24 @@
-from flask import Flask
+from prometheus_client import Counter, Histogram, generate_latest
+from flask import Response
 
-app = Flask(__name__)
+REQUEST_COUNT = Counter(
+    'app_requests_total',
+    'Total requests',
+    ['endpoint']
+)
+
+REQUEST_LATENCY = Histogram(
+    'request_duration_seconds',
+    'Request latency',
+    ['endpoint']
+)
 
 @app.route("/")
-def hello():
-    return {"message": "CI/CD EKS 🚀"}
+def home():
+    with REQUEST_LATENCY.labels(endpoint="/").time():
+        REQUEST_COUNT.labels(endpoint="/").inc()
+        return {"message": "Observability 🚀"}
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-    
+@app.route("/metrics")
+def metrics():
+    return Response(generate_latest(), mimetype="text/plain")
