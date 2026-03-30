@@ -37,19 +37,19 @@ jobs:
           cd gitops-helm-argocd/helm/ci-cd-app/
 
           echo "BEFORE:"
-          cat values.yaml
+          cat values-dev.yaml
 
           # Update tag correctamente
-          sed -i "s/tag:.*/tag: \"${{ env.IMAGE_TAG }}\"/" values.yaml
+          sed -i "s/tag:.*/tag: \"${{ env.IMAGE_TAG }}\"/" values-dev.yaml
 
           echo "AFTER:"
-          cat values.yaml
+          cat values-dev.yaml
 
           # Config git
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add values.yaml
+          git add values-dev.yaml
 
           git commit -m "chore(image): update tag to ${{ env.IMAGE_TAG }}" || echo "No changes to commit"
 
