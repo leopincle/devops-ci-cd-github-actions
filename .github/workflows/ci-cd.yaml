@@ -1,4 +1,4 @@
-name: CI-CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
@@ -7,56 +7,50 @@ on:
 
 env:
   IMAGE_NAME: ci-cd-app
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    - name: Set tag
-      run: echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -f docker/Dockerfile .
 
-    - name: Build image
-      run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -f docker/Dockerfile .
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-    - name: Push image
-      run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+      - name: Update Helm values in GitOps repo
+        run: |
+          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/leopincle/gitops-helm-argocd.git
+          cd gitops-helm-argocd/helm/ci-cd-app/
 
-    - name: Update Helm values in GitOps repo
-      run: |
-        git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/leopincle/gitops-helm-argocd.git
-        cd gitops-helm-argocd/helm/ci-cd-app/
+          echo "BEFORE:"
+          cat values.yaml
 
-        sed -i "s/tag:.*/tag: ${GITHUB_SHA}/" values.yaml
+          # Update tag correctamente
+          sed -i "s/tag:.*/tag: \"${{ env.IMAGE_TAG }}\"/" values.yaml
 
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
+          echo "AFTER:"
+          cat values.yaml
 
-        git commit -am "chore: update image tag to ${GITHUB_SHA}"
-        git push
+          # Config git
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+          git add values.yaml
 
-    - name: Update kubeconfig
-      run: aws eks update-kubeconfig --region us-east-1 --name ci-cd-cluster
+          git commit -m "chore(image): update tag to ${{ env.IMAGE_TAG }}" || echo "No changes to commit"
 
-    - name: Deploy to EKS
-      run: |
-        kubectl set image deployment/ci-cd-app app=${{ secrets.DOCKER_USERNAME }}/ci-cd-app:${{ env.IMAGE_TAG }}
-        kubectl rollout status deployment/ci-cd-app
+          git push
