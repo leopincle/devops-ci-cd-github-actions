@@ -1,0 +1,43 @@
+name: Auto Promote Dev → Staging
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  promote-to-staging:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout CI repo
+        uses: actions/checkout@v4
+
+      - name: Clone GitOps repo
+        run: |
+          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/leopincle/gitops-helm-argocd.git
+
+      - name: Extract tag from dev
+        run: |
+          cd gitops-helm-argocd/helm/ci-cd-app
+
+          TAG=$(grep 'tag:' values-dev.yaml | awk '{print $2}')
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Promote to staging
+        run: |
+          cd gitops-helm-argocd/helm/ci-cd-app
+
+          sed -i "s/tag:.*/tag: ${TAG}/" values-staging.yaml
+
+      - name: Commit & push
+        run: |
+          cd gitops-helm-argocd
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add .
+          git diff --quiet && echo "No changes" && exit 0
+          git commit -m "feat(auto-promotion): promote ${TAG} from dev to staging"
+          git push
