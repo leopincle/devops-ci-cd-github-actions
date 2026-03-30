@@ -1,0 +1,56 @@
+name: Promote Image Between Environments
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_env:
+        description: "Source environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+      target_env:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clone GitOps repo
+        run: |
+          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/leopincle/gitops-helm-argocd.git
+
+      - name: Extract image tag from source env
+        id: get_tag
+        run: |
+          cd gitops-helm-argocd/helm/ci-cd-app
+
+          TAG=$(grep 'tag:' values-${{ inputs.source_env }}.yaml | awk '{print $2}')
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Promote tag to target env
+        run: |
+          cd gitops-helm-argocd/helm/ci-cd-app
+
+          sed -i "s/tag:.*/tag: ${TAG}/" values-${{ inputs.target_env }}.yaml
+
+      - name: Commit & push changes
+        run: |
+          cd gitops-helm-argocd
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add .
+          git commit -m "feat(promotion): promote image ${TAG} from ${{ inputs.source_env }} to ${{ inputs.target_env }}"
+          git push
