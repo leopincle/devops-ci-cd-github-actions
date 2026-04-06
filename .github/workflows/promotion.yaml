@@ -10,6 +10,7 @@ on:
         options:
           - dev
           - staging
+
       target_env:
         description: "Target environment"
         required: true
@@ -22,27 +23,44 @@ jobs:
   promote:
     runs-on: ubuntu-latest
 
+    # ENVIRONMENT = CONTROL DE APPROVALS
+    environment: ${{ inputs.target_env }}
+
     steps:
-      - name: Checkout repo
+      - name: Checkout CI repo
         uses: actions/checkout@v4
 
-      - name: Clone GitOps repo
+      - name: Clone GitOps repository
         run: |
           git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/leopincle/gitops-helm-argocd.git
 
-      - name: Extract image tag from source env
-        id: get_tag
+      - name: Extract image tag from source environment
+        id: extract_tag
         run: |
           cd gitops-helm-argocd/helm/ci-cd-app
 
           TAG=$(grep 'tag:' values-${{ inputs.source_env }}.yaml | awk '{print $2}')
           echo "TAG=$TAG" >> $GITHUB_ENV
 
-      - name: Promote tag to target env
+          echo "Extracted TAG=$TAG"
+
+      - name: Validate promotion flow
+        run: |
+          if [[ "${{ inputs.source_env }}" == "dev" && "${{ inputs.target_env }}" == "prod" ]]; then
+            echo "Direct promotion from dev to prod is not allowed"
+            exit 1
+          fi
+
+      - name: Promote image to target environment
         run: |
           cd gitops-helm-argocd/helm/ci-cd-app
 
+          echo "Updating values-${{ inputs.target_env }}.yaml with tag $TAG"
+
           sed -i "s/tag:.*/tag: ${TAG}/" values-${{ inputs.target_env }}.yaml
+
+          echo "Result:"
+          cat values-${{ inputs.target_env }}.yaml
 
       - name: Commit & push changes
         run: |
@@ -52,5 +70,12 @@ jobs:
           git config user.email "actions@github.com"
 
           git add .
-          git commit -m "feat(promotion): promote image ${TAG} from ${{ inputs.source_env }} to ${{ inputs.target_env }}"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "feat(promotion): promote ${TAG} from ${{ inputs.source_env }} to ${{ inputs.target_env }}"
+
           git push
