@@ -56,5 +56,10 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "feat(promotion): promote ${IMAGE_TAG} from ${{ inputs.source_env }} to ${{ inputs.target_env }}"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit. Skipping..."
+          else
+            git commit -m "feat(promotion): promote ${IMAGE_TAG} from ${{ inputs.source_env }} to ${{ inputs.target_env }}"
+            git push
+          fi
